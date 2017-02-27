@@ -6,6 +6,7 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var winston = require('winston');
 var wechat = require('wechat');
+var wechatAPI = require('wechat-api');
 
 var app = express();
 
@@ -25,6 +26,7 @@ var config = {
   checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false 
 };
 
+
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
@@ -40,13 +42,59 @@ app.use(express.static(path.join(__dirname, 'public')));
 //this can get message from WeChat server, and can send message to wechat client
 //此处监控的是URL的wechat，那么在配置微信的URL时，也需要在主机URL地址后面加入wechat这样才可以获取到数据
 app.use(express.query());
-app.use('/wechat', wechat(config, function (req, res, next) {
-  //微信输入信息都在req.weixin上 
+app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next) {
   var message = req.weixin;
-  logger.log('info',message);
+  logger.log("info", message);
 
-  res.reply('reply message');
-}));
+  res.reply('text');
+}).image(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).voice(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).video(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).location(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).link(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).event(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).device_text(function (message, req, res, next) {
+  var message = req.weixin;
+  logger.log("info", message);
+
+  res.reply('功能开发中');
+}).device_event(function (message, req, res, next) {
+  if (message.Event === 'subscribe' || message.Event === 'unsubscribe') {
+    var message = req.weixin;
+    logger.log("info", message);
+
+    res.reply("功能开发中");
+  } else {
+    var message = req.weixin;
+    logger.log("info", message);
+
+    res.reply('功能开发中');
+  }
+})));
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
