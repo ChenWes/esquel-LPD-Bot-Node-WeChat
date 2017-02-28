@@ -9,11 +9,15 @@
     "body-parser": "~1.16.0",
     "cookie-parser": "~1.4.3",
     "debug": "~2.6.0",
+    "directline-api-v3": "^1.0.9",
     "express": "~4.14.1",
     "jade": "~1.11.0",
     "morgan": "~1.7.0",
+    "request": "^2.79.0",
+    "rxjs": "^5.2.0",
+    "rxjs-es": "^5.0.0-beta.12",
     "serve-favicon": "~2.3.2",
-    "wechat": "^2.1.0",    
+    "wechat": "^2.1.0",
     "winston": "^2.3.1"
   }
 }

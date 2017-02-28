@@ -7,6 +7,12 @@ var bodyParser = require('body-parser');
 var winston = require('winston');
 var wechat = require('wechat');
 var wechatAPI = require('wechat-api');
+var client = require('./directline-api-v3');
+
+//for direct line
+var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
+var _tokenObject;
+var _conversationWss;
 
 var app = express();
 
@@ -25,6 +31,25 @@ var config = {
   encodingAESKey: 'ZEtViedarf49EUOCDeu45pqhkZhKPFBjSHI2DynP4vq',
   checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false 
 };
+
+
+client.getTokenObject(secret).subscribe(
+  (tokenObject) => {
+    _tokenObject = tokenObject;
+
+    client.initConversationStream(_tokenObject).subscribe(
+      (message) => {
+        _conversationWss = message;
+      },
+      (err) => console.log(err),
+      () => console.log("Conversation complete---------------------------------")
+    )
+
+  },
+  (err) => console.log(err),
+  () => console.log('Token complete---------------------------------')
+)
+
 
 
 // view engine setup
