@@ -42,6 +42,33 @@ BotConnect.prototype.getTokenObject = (secret) => {
     })
 }
 
+//刷新Token
+BotConnect.prototype.refTokenObject = (TokenObject) => {
+    return Rx.Observable.create(observer => {
+        request({
+            method: 'POST',
+            url: 'https://directline.botframework.com/v3/directline/tokens/refresh',
+            headers: {
+                'Authorization': 'Bearer ' + TokenObject.token
+            }
+        }, function (err, response, body) {
+            if (err) {
+                observer.error(err);
+                observer.complete();
+            }
+            if (response.statusCode === 200) {
+                observer.next(JSON.parse(body));
+                observer.complete();
+            }
+            else {
+                observer.error(response.statusCode + " error ");
+                observer.complete();
+            }
+        })
+
+    })
+}
+
 //生成Conversation
 BotConnect.prototype.initConversationStream = (TokenObject) => {
     return Rx.Observable.create(observer => {

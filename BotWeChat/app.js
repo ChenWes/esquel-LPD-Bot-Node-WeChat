@@ -32,14 +32,16 @@ var config = {
   checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false 
 };
 
-
+//=========================================================================================================
 client.getTokenObject(secret).subscribe(
   (tokenObject) => {
     _tokenObject = tokenObject;
+    logger.log('info', _tokenObject);
 
     client.initConversationStream(_tokenObject).subscribe(
       (message) => {
         _conversationWss = message;
+        logger.log('info', _conversationWss);
       },
       (err) => console.log(err),
       () => console.log("Conversation complete---------------------------------")
@@ -49,7 +51,7 @@ client.getTokenObject(secret).subscribe(
   (err) => console.log(err),
   () => console.log('Token complete---------------------------------')
 )
-
+//=========================================================================================================
 
 
 // view engine setup
@@ -68,10 +70,32 @@ app.use(express.static(path.join(__dirname, 'public')));
 //此处监控的是URL的wechat，那么在配置微信的URL时，也需要在主机URL地址后面加入wechat这样才可以获取到数据
 app.use(express.query());
 app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next) {
+  //------------------------------------------------------------------------
   var message = req.weixin;
   logger.log("info", message);
+  //=========================================================================================================
+  var messageBody = {
+    "type": "message",
+    "from": {
+      "id": message.FromUserName,
+      "FromUserName": 'WeChatUser'
+    },
+    "text": message.Content
+  };
 
-  res.reply('text');
+  client.sendMessage(_tokenObject, messageBody).subscribe(
+    (data) => {
+      logger.log('error', data);
+    },
+    (err) => logger.log('error', err),
+    () => {
+      console.log("send Message complete");
+    }
+  );
+
+  res.reply('消息已处理');
+
+  //=========================================================================================================  
 }).image(function (message, req, res, next) {
   var message = req.weixin;
   logger.log("info", message);
@@ -101,7 +125,7 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   var message = req.weixin;
   logger.log("info", message);
 
-  res.reply('功能开发中');
+  res.reply('感谢你的关注，你也可以在github中查看，https://github.com/ChenWes/esquel-LPD-Bot-Node-WeChat');
 }).device_text(function (message, req, res, next) {
   var message = req.weixin;
   logger.log("info", message);
@@ -111,12 +135,12 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   if (message.Event === 'subscribe' || message.Event === 'unsubscribe') {
     var message = req.weixin;
     logger.log("info", message);
-
+    //关注事件
     res.reply("功能开发中");
   } else {
     var message = req.weixin;
     logger.log("info", message);
-
+    //关注事件
     res.reply('功能开发中');
   }
 })));
