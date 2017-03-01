@@ -112,7 +112,7 @@ BotConnect.prototype.sendMessage = (TokenObject, body) => {
                 observer.error(err);
                 observer.complete();
             }
-            if (response.statusCode === 200 || 201) {
+            if (response.statusCode === 200 || 201 || response.statusCode === 403) {
                 observer.next(body);
                 observer.complete();
             }

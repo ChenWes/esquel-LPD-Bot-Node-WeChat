@@ -8,6 +8,9 @@ var winston = require('winston');
 var wechat = require('wechat');
 var wechatAPI = require('wechat-api');
 var client = require('./directline-api-v3');
+var WebSocket = require('ws');
+
+
 
 //for direct line
 var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
@@ -31,6 +34,33 @@ var config = {
   encodingAESKey: 'ZEtViedarf49EUOCDeu45pqhkZhKPFBjSHI2DynP4vq',
   checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false 
 };
+
+// var api = new wechatAPI(config.appid, config.encodingAESKey);
+// var menu = {
+//  "button":[
+//    {
+//      "type":"click",
+//      "name":"今日歌曲",
+//      "key":"V1001_TODAY_MUSIC"
+//    },
+//    {
+//      "name":"菜单",
+//      "sub_button":[
+//        {
+//          "type":"view",
+//          "name":"搜索",
+//          "url":"http://www.soso.com/"
+//        },
+//        {
+//          "type":"click",
+//          "name":"赞一下我们",
+//          "key":"V1001_GOOD"
+//        }]
+//      }]   
+// };
+// api.createMenu(menu, function(result){
+//   console.log('menu success');
+// });
 
 //=========================================================================================================
 client.getTokenObject(secret).subscribe(
@@ -73,6 +103,8 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   //------------------------------------------------------------------------
   var message = req.weixin;
   logger.log("info", message);
+
+  res.transfer2CustomerService()
   //=========================================================================================================
   var messageBody = {
     "type": "message",
@@ -85,15 +117,28 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
 
   client.sendMessage(_tokenObject, messageBody).subscribe(
     (data) => {
-      logger.log('error', data);
+
+      var ws = new WebSocket(_conversationWss);
+      ws.on('message', function (retsult, flags) {
+        logger.log('info', retsult);
+
+        // if (JSON.parse(retsult).activities[0].from.id !== message.FromUserName) {
+        //   res.reply(JSON.parse(retsult).activities[0].text);
+        // }
+      });
+      ws.on('close', function close() {
+        //observer.complete();
+        console.log("get Message complete");
+      });
+
     },
     (err) => logger.log('error', err),
     () => {
       console.log("send Message complete");
     }
-  );
+  );  
 
-  res.reply('消息已处理');
+  res.reply('Message Process Completed.');
 
   //=========================================================================================================  
 }).image(function (message, req, res, next) {
@@ -135,12 +180,12 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   if (message.Event === 'subscribe' || message.Event === 'unsubscribe') {
     var message = req.weixin;
     logger.log("info", message);
-    //关注事件
+    
     res.reply("功能开发中");
   } else {
     var message = req.weixin;
     logger.log("info", message);
-    //关注事件
+    
     res.reply('功能开发中');
   }
 })));
