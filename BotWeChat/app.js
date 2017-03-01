@@ -17,6 +17,7 @@ var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
 var _tokenObject;
 var _conversationWss;
 
+//create express eneity
 var app = express();
 
 //setting logger
@@ -30,48 +31,68 @@ var logger = new (winston.Logger)({
 //wechat config
 var config = {
   token: 'weixin',
-  appid: 'wxf6d0ac7f84dc22fb',
+  appid: 'wx1434eed5268660c4',
   encodingAESKey: 'ZEtViedarf49EUOCDeu45pqhkZhKPFBjSHI2DynP4vq',
   checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false 
 };
 
-// var api = new wechatAPI(config.appid, config.encodingAESKey);
-// var menu = {
-//  "button":[
-//    {
-//      "type":"click",
-//      "name":"今日歌曲",
-//      "key":"V1001_TODAY_MUSIC"
-//    },
-//    {
-//      "name":"菜单",
-//      "sub_button":[
-//        {
-//          "type":"view",
-//          "name":"搜索",
-//          "url":"http://www.soso.com/"
-//        },
-//        {
-//          "type":"click",
-//          "name":"赞一下我们",
-//          "key":"V1001_GOOD"
-//        }]
-//      }]   
-// };
-// api.createMenu(menu, function(result){
-//   console.log('menu success');
-// });
+//create wechat-api entity
+var api = new wechatAPI(config.appid, '30a5f51682755652e6e02879757a0fb1');
+
+var menu = {
+  "button": [
+    {
+      "type": "click",
+      "name": "WeChat Bot",
+      "key": "V1001_TODAY_MUSIC"
+    },
+    {
+      "name": "BotFramework",
+      "sub_button": [
+        {
+          "type": "view",
+          "name": "botframework",
+          "url": "https://dev.botframework.com/"
+        },
+        {
+          "type": "click",
+          "name": "赞一下我们",
+          "key": "V1001_GOOD"
+        }, {
+          "name": "发送位置",
+          "type": "location_select",
+          "key": "rselfmenu_2_0"
+        },]
+    }]
+};
+
+//remove menu
+api.removeMenu(function (err, result) {
+  if (err) {
+    logger.log('error', err);
+  }
+  logger.log('info', 'remove menu success');
+});
+
+//create menu
+api.createMenu(menu, function (err, result) {
+  if (err) {
+    logger.log('error', err);
+  }
+  logger.log('info', 'create menu success');
+});
 
 //=========================================================================================================
+//get token and create Conversation
 client.getTokenObject(secret).subscribe(
   (tokenObject) => {
     _tokenObject = tokenObject;
-    logger.log('info', _tokenObject);
+    // logger.log('info', _tokenObject);
 
     client.initConversationStream(_tokenObject).subscribe(
       (message) => {
         _conversationWss = message;
-        logger.log('info', _conversationWss);
+        // logger.log('info', _conversationWss);
       },
       (err) => console.log(err),
       () => console.log("Conversation complete---------------------------------")
@@ -87,6 +108,7 @@ client.getTokenObject(secret).subscribe(
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
+
 
 // uncomment after placing your favicon in /public
 //app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
@@ -104,8 +126,8 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   var message = req.weixin;
   logger.log("info", message);
 
-  res.transfer2CustomerService()
   //=========================================================================================================
+  //send message to bot framework
   var messageBody = {
     "type": "message",
     "from": {
@@ -118,13 +140,24 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   client.sendMessage(_tokenObject, messageBody).subscribe(
     (data) => {
 
+      var touserid = message.FromUserName;
+
       var ws = new WebSocket(_conversationWss);
       ws.on('message', function (retsult, flags) {
-        logger.log('info', retsult);
+        //logger.log('info', retsult);
 
-        // if (JSON.parse(retsult).activities[0].from.id !== message.FromUserName) {
-        //   res.reply(JSON.parse(retsult).activities[0].text);
-        // }
+        if (retsult) {
+          if (JSON.parse(retsult).activities[0].from.id !== message.FromUserName) {
+            
+            api.sendText(touserid, JSON.parse(retsult).activities[0].text, function (err, result) {
+              if (err) {
+                logger.log('error', err);
+              }
+              console.log('info', 'reply message success');
+            });
+          }
+        }
+
       });
       ws.on('close', function close() {
         //observer.complete();
@@ -136,9 +169,9 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
     () => {
       console.log("send Message complete");
     }
-  );  
+  );
 
-  res.reply('Message Process Completed.');
+  res.reply('Message Send To Bot Completed , Wait Response.');
 
   //=========================================================================================================  
 }).image(function (message, req, res, next) {
@@ -171,6 +204,8 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   logger.log("info", message);
 
   res.reply('感谢你的关注，你也可以在github中查看，https://github.com/ChenWes/esquel-LPD-Bot-Node-WeChat');
+
+
 }).device_text(function (message, req, res, next) {
   var message = req.weixin;
   logger.log("info", message);
@@ -180,12 +215,12 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   if (message.Event === 'subscribe' || message.Event === 'unsubscribe') {
     var message = req.weixin;
     logger.log("info", message);
-    
+
     res.reply("功能开发中");
   } else {
     var message = req.weixin;
     logger.log("info", message);
-    
+
     res.reply('功能开发中');
   }
 })));
