@@ -148,13 +148,40 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
 
         if (retsult) {
           if (JSON.parse(retsult).activities[0].from.id !== message.FromUserName) {
-            
+
             api.sendText(touserid, JSON.parse(retsult).activities[0].text, function (err, result) {
               if (err) {
                 logger.log('error', err);
               }
               console.log('info', 'reply message success');
             });
+
+            if (JSON.parse(retsult).activities[0].attachments) {
+              JSON.parse(retsult).activities[0].attachments.forEach(function (attachmentItem) {
+                if (attachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || attachmentItem.contentType == 'application/vnd.microsoft.card.hero') {
+                  console.log(attachmentItem.content.images[0].url);
+
+
+                  api.sendText(touserid, attachmentItem.content.images[0].url, function (err, result) {
+                    if (err) {
+                      logger.log('error', err);
+                    }
+                    console.log('info', 'reply message success');
+                  });
+                  //上传文件
+                  // api.uploadMaterial(attachmentItem.content.images[0].url, function (err, result) {
+
+                  //   //发送图片
+                  //   api.sendImage(touserid, result.media_id, function (err, result) {
+                  //     if (err) {
+                  //       logger.log('error', err);
+                  //     }
+                  //     console.log('info', 'reply image success');
+                  //   });
+                  // });
+                }
+              });
+            }
           }
         }
 
