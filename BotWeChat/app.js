@@ -127,6 +127,7 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   logger.log("info", message);
 
   //=========================================================================================================
+  var touserid = message.FromUserName;
   //send message to bot framework
   var messageBody = {
     "type": "message",
@@ -139,15 +140,15 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
 
   client.sendMessage(_tokenObject, messageBody).subscribe(
     (data) => {
-
-      var touserid = message.FromUserName;
+      var sendMessageid = data.id
+      console.log('after send:' + sendMessageid);
 
       var ws = new WebSocket(_conversationWss);
       ws.on('message', function (retsult, flags) {
         //logger.log('info', retsult);
-
+        console.log('ws message:' + sendMessageid);
         if (retsult) {
-          if (JSON.parse(retsult).activities[0].from.id !== message.FromUserName) {
+          if (JSON.parse(retsult).activities[0].replyToId == sendMessageid) {
 
             api.sendText(touserid, JSON.parse(retsult).activities[0].text, function (err, result) {
               if (err) {
@@ -159,25 +160,23 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
             if (JSON.parse(retsult).activities[0].attachments) {
               JSON.parse(retsult).activities[0].attachments.forEach(function (attachmentItem) {
                 if (attachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || attachmentItem.contentType == 'application/vnd.microsoft.card.hero') {
-                  console.log(attachmentItem.content.images[0].url);
+                  //图片
+                  // api.sendText(touserid, attachmentItem.content.title + '\r' + attachmentItem.content.subtitle + '\r' + attachmentItem.content.text + '\r' + attachmentItem.content.images[0].url, function (err, result) {
+                  //   if (err) {
+                  //     logger.log('error', err);
+                  //   }
+                  //   console.log('info', 'reply image success');
+                  // });
 
-
-                  api.sendText(touserid, attachmentItem.content.images[0].url, function (err, result) {
+                  //上传文件
+                  // api.uploadMaterial(attachmentItem.content.images[0].url, function (err, result) {
+                  //   //发送图片
+                  api.sendImage(touserid, '8Pi9QPnfPUbu48rCq2rpjtEpeGkNJXStiHLhs29ATRTFA_CYsjCCOW5gfb4WZqNf', function (err, result) {
                     if (err) {
                       logger.log('error', err);
                     }
-                    console.log('info', 'reply message success');
+                    console.log('info', 'reply image success');
                   });
-                  //上传文件
-                  // api.uploadMaterial(attachmentItem.content.images[0].url, function (err, result) {
-
-                  //   //发送图片
-                  //   api.sendImage(touserid, result.media_id, function (err, result) {
-                  //     if (err) {
-                  //       logger.log('error', err);
-                  //     }
-                  //     console.log('info', 'reply image success');
-                  //   });
                   // });
                 }
               });
@@ -187,7 +186,6 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
 
       });
       ws.on('close', function close() {
-        //observer.complete();
         console.log("get Message complete");
       });
 
