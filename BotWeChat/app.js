@@ -9,7 +9,6 @@ var wechat = require('wechat');
 var wechatAPI = require('wechat-api');
 var client = require('./directline-api-v3');
 var _ = require("underscore");
-// var WebSocket = require('ws');
 
 //for direct line
 var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
@@ -87,21 +86,21 @@ var api = new wechatAPI(config.appid, '30a5f51682755652e6e02879757a0fb1');
 client.getTokenObject(secret).subscribe(
   (tokenObject) => {
     _tokenObject = tokenObject;
-    logger.log('info', _tokenObject);
+    logger.log('1.1:get token', _tokenObject);
 
     client.initConversationStream(_tokenObject).subscribe(
       (message) => {
         _conversationWss = message;
-        logger.log('info', _conversationWss);
+        logger.log('1.2:info', _conversationWss);
       },
       (err) => console.log(err),
-      () => console.log("Conversation complete---------------------------------")
+      () => console.log("1.2:get conversation successfully---------------------------------")
     )
 
     //maybe need refresh token here
   },
   (err) => console.log(err),
-  () => console.log('Token complete---------------------------------')
+  () => console.log('1.1:get token successfully---------------------------------')
 )
 //=========================================================================================================
 
@@ -118,40 +117,46 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 
-//get message to message
+//get message from bot framework function
 function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark) {
-  // console.log('watermark:' + _watermark);
-  // console.log('token :' + tokenobject.token);
-  // console.log('Conversation :' + tokenobject.conversationId);
-  // console.log('reply message id:' + sendmsgid);
 
+  //get message from bot framework api
   client.getMessage(tokenobject, sendwatermark).subscribe(
     (result) => {
-      // console.log(result);
 
       _watermark = result.watermark;
+
+      //filter activities
       var getResponseMessages = _.where(result.activities, { replyToId: sendmsgid });
 
       if (getResponseMessages) {
-        // For(var getResponseMessageItem in getResponseMessages){
+
+        //process message
         getResponseMessages.forEach(function (getResponseMessageItem) {
 
-          //get message item
-          wechatSendMessage(senduserid, getResponseMessageItem.text);
+          api.sendText(senduserid, getResponseMessageItem.text, function (err, result) {
+            if (err) {
+              logger.log('3.2:reply wechat client (' + senduserid + ') message error', err);
+            }
+          });
 
           //process attachment
           if (getResponseMessageItem.attachments) {
-            // For(var getResponseMessageAttachmentItem in getResponseMessageItem.attachments)
             getResponseMessageItem.attachments.forEach(function (getResponseMessageAttachmentItem) {
               if (getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.hero')
-                wechatSendMessage(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text + '\r' + getResponseMessageAttachmentItem.content.images[0].url);
+
+                api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text + '\r' + getResponseMessageAttachmentItem.content.images[0].url, function (err, result) {
+                  if (err) {
+                    logger.log('3.3:reply wechat client (' + senduserid + ') attachment error', err);
+                  }
+                });
             });
           }
         });
       }
     },
-    (err) => console.log(err),
-    () => console.log("get message complete---------------------------------")
+    (err) => logger.log('3.1:get message from botframework error', err),
+    () => console.log("3.1:get message from botframework successfully---------------------------------")
   )
 }
 
@@ -161,7 +166,6 @@ function wechatSendMessage(sendUserId, message) {
     if (err) {
       logger.log('error', err);
     }
-    // console.log('info', 'reply message success');
   });
 }
 
@@ -172,7 +176,7 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   //------------------------------------------------------------------------
   //get message from wechat client
   var message = req.weixin;
-  logger.log("info", message);
+  logger.log("2.1:get message from wechat client", message);
 
   //=========================================================================================================
   var touserid = message.FromUserName;
@@ -186,22 +190,24 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
     "text": message.Content
   };
 
-  //send to message
+  //send to message to bot framework
   client.sendMessage(_tokenObject, messageBody).subscribe(
     (data) => {
       var sendMessageid = data.id;
+
+      //time out function get message from botframework
       setTimeout(function () {
         getmessagefrombotframework(touserid, _tokenObject, sendMessageid, _watermark)
       }, 10000);
     },
-    (err) => logger.log('error', err),
+    (err) => logger.log('2.2:send message to BotFramework error', err),
     () => {
-      console.log("send Message to bot botframework completed");
+      console.log("2.2:send message to bot botframework successfully");
     }
   );
 
   //response for wechat client
-  res.reply('message sent successfully, waiting for response');
+  res.reply('message send successfully, waiting for response');
 
   //=========================================================================================================  
 }).image(function (message, req, res, next) {
