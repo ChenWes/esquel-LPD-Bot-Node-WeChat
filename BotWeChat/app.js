@@ -8,14 +8,14 @@ var winston = require('winston');
 var wechat = require('wechat');
 var wechatAPI = require('wechat-api');
 var client = require('./directline-api-v3');
-var WebSocket = require('ws');
-
-
+var _ = require("underscore");
+// var WebSocket = require('ws');
 
 //for direct line
 var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
 var _tokenObject;
 var _conversationWss;
+var _watermark = 0;
 
 //create express eneity
 var app = express();
@@ -24,7 +24,7 @@ var app = express();
 var logger = new (winston.Logger)({
   transports: [
     new (winston.transports.Console)(),
-    new (winston.transports.File)({ filename: './log/bot-wechat.log' })
+    new (winston.transports.File)({ filename: './log/bot-wechat-0302.log' })
   ]
 });
 
@@ -39,71 +39,71 @@ var config = {
 //create wechat-api entity
 var api = new wechatAPI(config.appid, '30a5f51682755652e6e02879757a0fb1');
 
-var menu = {
-  "button": [
-    {
-      "type": "click",
-      "name": "WeChat Bot",
-      "key": "V1001_TODAY_MUSIC"
-    },
-    {
-      "name": "BotFramework",
-      "sub_button": [
-        {
-          "type": "view",
-          "name": "botframework",
-          "url": "https://dev.botframework.com/"
-        },
-        {
-          "type": "click",
-          "name": "赞一下我们",
-          "key": "V1001_GOOD"
-        }, {
-          "name": "发送位置",
-          "type": "location_select",
-          "key": "rselfmenu_2_0"
-        },]
-    }]
-};
+// var menu = {
+//   "button": [
+//     {
+//       "type": "click",
+//       "name": "WeChat Bot",
+//       "key": "V1001_TODAY_MUSIC"
+//     },
+//     {
+//       "name": "BotFramework",
+//       "sub_button": [
+//         {
+//           "type": "view",
+//           "name": "botframework",
+//           "url": "https://dev.botframework.com/"
+//         },
+//         {
+//           "type": "click",
+//           "name": "赞一下我们",
+//           "key": "V1001_GOOD"
+//         }, {
+//           "name": "发送位置",
+//           "type": "location_select",
+//           "key": "rselfmenu_2_0"
+//         },]
+//     }]
+// };
 
-//remove menu
-api.removeMenu(function (err, result) {
-  if (err) {
-    logger.log('error', err);
-  }
-  logger.log('info', 'remove menu success');
-});
+// //remove menu
+// api.removeMenu(function (err, result) {
+//   if (err) {
+//     logger.log('error', err);
+//   }
+//   logger.log('info', 'remove menu success');
+// });
 
-//create menu
-api.createMenu(menu, function (err, result) {
-  if (err) {
-    logger.log('error', err);
-  }
-  logger.log('info', 'create menu success');
-});
+// //create menu
+// api.createMenu(menu, function (err, result) {
+//   if (err) {
+//     logger.log('error', err);
+//   }
+//   logger.log('info', 'create menu success');
+// });
 
 //=========================================================================================================
 //get token and create Conversation
 client.getTokenObject(secret).subscribe(
   (tokenObject) => {
     _tokenObject = tokenObject;
-    // logger.log('info', _tokenObject);
+    logger.log('info', _tokenObject);
 
     client.initConversationStream(_tokenObject).subscribe(
       (message) => {
         _conversationWss = message;
-        // logger.log('info', _conversationWss);
+        logger.log('info', _conversationWss);
       },
       (err) => console.log(err),
       () => console.log("Conversation complete---------------------------------")
     )
 
+    //maybe need refresh token here
   },
   (err) => console.log(err),
   () => console.log('Token complete---------------------------------')
 )
 //=========================================================================================================
-
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -118,17 +118,65 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 
+//get message to message
+function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark) {
+  // console.log('watermark:' + _watermark);
+  // console.log('token :' + tokenobject.token);
+  // console.log('Conversation :' + tokenobject.conversationId);
+  // console.log('reply message id:' + sendmsgid);
+
+  client.getMessage(tokenobject, sendwatermark).subscribe(
+    (result) => {
+      // console.log(result);
+
+      _watermark = result.watermark;
+      var getResponseMessages = _.where(result.activities, { replyToId: sendmsgid });
+
+      if (getResponseMessages) {
+        // For(var getResponseMessageItem in getResponseMessages){
+        getResponseMessages.forEach(function (getResponseMessageItem) {
+
+          //get message item
+          wechatSendMessage(senduserid, getResponseMessageItem.text);
+
+          //process attachment
+          if (getResponseMessageItem.attachments) {
+            // For(var getResponseMessageAttachmentItem in getResponseMessageItem.attachments)
+            getResponseMessageItem.attachments.forEach(function (getResponseMessageAttachmentItem) {
+              if (getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.hero')
+                wechatSendMessage(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text + '\r' + getResponseMessageAttachmentItem.content.images[0].url);
+            });
+          }
+        });
+      }
+    },
+    (err) => console.log(err),
+    () => console.log("get message complete---------------------------------")
+  )
+}
+
+//wechat send message
+function wechatSendMessage(sendUserId, message) {
+  api.sendText(sendUserId, message, function (err, result) {
+    if (err) {
+      logger.log('error', err);
+    }
+    // console.log('info', 'reply message success');
+  });
+}
+
 //this can get message from WeChat server, and can send message to wechat client
 //此处监控的是URL的wechat，那么在配置微信的URL时，也需要在主机URL地址后面加入wechat这样才可以获取到数据
 app.use(express.query());
 app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next) {
   //------------------------------------------------------------------------
+  //get message from wechat client
   var message = req.weixin;
   logger.log("info", message);
 
   //=========================================================================================================
   var touserid = message.FromUserName;
-  //send message to bot framework
+  //send message entity
   var messageBody = {
     "type": "message",
     "from": {
@@ -138,65 +186,22 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
     "text": message.Content
   };
 
+  //send to message
   client.sendMessage(_tokenObject, messageBody).subscribe(
     (data) => {
-      var sendMessageid = data.id
-      console.log('after send:' + sendMessageid);
-
-      var ws = new WebSocket(_conversationWss);
-      ws.on('message', function (retsult, flags) {
-        //logger.log('info', retsult);
-        console.log('ws message:' + sendMessageid);
-        if (retsult) {
-          if (JSON.parse(retsult).activities[0].replyToId == sendMessageid) {
-
-            api.sendText(touserid, JSON.parse(retsult).activities[0].text, function (err, result) {
-              if (err) {
-                logger.log('error', err);
-              }
-              console.log('info', 'reply message success');
-            });
-
-            if (JSON.parse(retsult).activities[0].attachments) {
-              JSON.parse(retsult).activities[0].attachments.forEach(function (attachmentItem) {
-                if (attachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || attachmentItem.contentType == 'application/vnd.microsoft.card.hero') {
-                  //图片
-                  // api.sendText(touserid, attachmentItem.content.title + '\r' + attachmentItem.content.subtitle + '\r' + attachmentItem.content.text + '\r' + attachmentItem.content.images[0].url, function (err, result) {
-                  //   if (err) {
-                  //     logger.log('error', err);
-                  //   }
-                  //   console.log('info', 'reply image success');
-                  // });
-
-                  //上传文件
-                  // api.uploadMaterial(attachmentItem.content.images[0].url, function (err, result) {
-                  //   //发送图片
-                  api.sendImage(touserid, '8Pi9QPnfPUbu48rCq2rpjtEpeGkNJXStiHLhs29ATRTFA_CYsjCCOW5gfb4WZqNf', function (err, result) {
-                    if (err) {
-                      logger.log('error', err);
-                    }
-                    console.log('info', 'reply image success');
-                  });
-                  // });
-                }
-              });
-            }
-          }
-        }
-
-      });
-      ws.on('close', function close() {
-        console.log("get Message complete");
-      });
-
+      var sendMessageid = data.id;
+      setTimeout(function () {
+        getmessagefrombotframework(touserid, _tokenObject, sendMessageid, _watermark)
+      }, 10000);
     },
     (err) => logger.log('error', err),
     () => {
-      console.log("send Message complete");
+      console.log("send Message to bot botframework completed");
     }
   );
 
-  res.reply('Message Send To Bot Completed , Wait Response.');
+  //response for wechat client
+  res.reply('message sent successfully, waiting for response');
 
   //=========================================================================================================  
 }).image(function (message, req, res, next) {

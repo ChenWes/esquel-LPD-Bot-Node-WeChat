@@ -125,6 +125,38 @@ BotConnect.prototype.sendMessage = (TokenObject, body) => {
     })
 }
 
+//接收消息
+BotConnect.prototype.getMessage = (TokenObject, watermark) => {
+    var watermarkStr = watermark ? 'watermark=' + watermark : '';
+    // console.log('get message to function watermark:' + watermarkStr);
+
+    return Rx.Observable.create(observer => {
+        request({
+            method: 'GET',
+            url: "https://directline.botframework.com/v3/directline/conversations/" + TokenObject.conversationId + "/activities" + '?' + watermarkStr,
+            headers: {
+                'Authorization': 'Bearer ' + TokenObject.token
+            },
+            json: true
+        }, function (err, response, body) {
+            if (err) {
+                observer.error(err);
+                observer.complete();
+            }
+            if (response.statusCode === 200) {
+                observer.next(body);
+                observer.complete();
+            }
+            else {
+                observer.error(response.statusCode + " error ");
+                observer.complete();
+            }
+        })
+
+    })
+}
+
+
 //结束converstaion
 BotConnect.prototype.endConversation = (TokenObject) => {
     return Rx.Observable.create(observer => {
