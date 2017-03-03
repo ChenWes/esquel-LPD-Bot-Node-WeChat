@@ -13,6 +13,7 @@
     "express": "~4.14.1",
     "jade": "~1.11.0",
     "morgan": "~1.7.0",
+    "node-schedule": "^1.2.0",
     "request": "^2.79.0",
     "rxjs": "^5.2.0",
     "rxjs-es": "^5.0.0-beta.12",

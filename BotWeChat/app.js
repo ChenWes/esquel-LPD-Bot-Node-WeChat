@@ -9,12 +9,16 @@ var wechat = require('wechat');
 var wechatAPI = require('wechat-api');
 var client = require('./directline-api-v3');
 var _ = require("underscore");
+var schedule = require('node-schedule');
 
 //for direct line
 var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
 var _tokenObject;
 var _conversationWss;
 var _watermark = 0;
+
+//for schedule
+var _refershSchedule;
 
 //create express eneity
 var app = express();
@@ -82,38 +86,59 @@ var api = new wechatAPI(config.appid, '30a5f51682755652e6e02879757a0fb1');
 // });
 
 //=========================================================================================================
-//get token and create Conversation
-client.getTokenObject(secret).subscribe(
-  (tokenObject) => {
-    _tokenObject = tokenObject;
-    logger.log('1.1:get token', _tokenObject);
-
-    client.initConversationStream(_tokenObject).subscribe(
-      (message) => {
-        _conversationWss = message;
-        logger.log('1.2:info', _conversationWss);
-      },
-      (err) => console.log(err),
-      () => console.log("1.2:get conversation successfully")
-    )
-
-    //maybe need refresh token here
-  },
-  (err) => console.log(err),
-  () => console.log('1.1:get token successfully')
-)
-//=========================================================================================================
-function refreshToken() {
-  client.refTokenObject(secret).subscribe(
+//get token 
+function getTokenAndGetConverstation() {
+  client.getTokenObject(secret).subscribe(
     (tokenObject) => {
       _tokenObject = tokenObject;
-      logger.log('1.3:refresh token', _tokenObject);
+      logger.log('info', _tokenObject);
+
+      //create Conversation
+      client.initConversationStream(_tokenObject).subscribe(
+        (message) => {
+          _conversationWss = message;
+          logger.log('info', _conversationWss);
+
+
+          //refresh token,every 15 min refreshToken
+          var rule = new schedule.RecurrenceRule();
+          rule.minute = [0, 15, 30, 45];
+          _refershSchedule = schedule.scheduleJob(rule, function () {
+            console.log('===>' + new Date());
+            refreshToken();
+          });
+
+        },
+        (err) => console.log(err),
+        () => console.log("1.2:get conversation successfully")
+      )
+
     },
     (err) => console.log(err),
+    () => console.log('1.1:get token successfully')
+  )
+}
+getTokenAndGetConverstation();
+
+//=========================================================================================================
+function refreshToken() {
+  console.log('------------------------refreshToken-----------------------------' + new Date());
+  client.refTokenObject(_tokenObject).subscribe(
+    (tokenObject) => {
+      _tokenObject = tokenObject;
+      logger.log('info', _tokenObject);
+    },
+    (err) => {
+      console.log(err);
+
+      //cancel schedule
+      _refershSchedule.cancel();
+
+    },
     () => console.log('1.3:refresh token successfully')
   )
 }
-//=========================================================================================================
+
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -129,7 +154,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 //send message to bot framework
 function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
-
   client.sendMessage(_tokenObject, messageBody).subscribe(
     (data) => {
       var sendMessageid = data.id;
@@ -140,11 +164,7 @@ function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
       }, 10000);
     },
     (err) => {
-
-      logger.log('2.2:send message to BotFramework error', err);
-
-      refreshToken();
-      sendMessage(_tokenObject, messageBody, touserid);
+      logger.log('error', err);
     },
     () => {
       console.log("2.2:send message to bot botframework successfully");
@@ -154,8 +174,6 @@ function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
 
 //get message from bot framework function
 function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark) {
-
-  //get message from bot framework api
   client.getMessage(tokenobject, sendwatermark).subscribe(
     (result) => {
 
@@ -166,12 +184,16 @@ function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwate
       //send message to wechat client
       sendMessageToClient(senduserid, getResponseMessages);
 
+      //if send message max , then restart the converstation
+      var arr = sendmsgid.split('|');
+      console.log(arr[1]);
+      if (arr[1] == '9999999') {
+        getTokenAndGetConverstation();
+      }
+
     },
     (err) => {
-      logger.log('3.1:get message from botframework error', err);
-
-      refreshToken();
-      getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark);
+      logger.log('error', err);
     },
     () => console.log("3.1:get message from botframework successfully")
   )
@@ -187,7 +209,7 @@ function sendMessageToClient(senduserid, getResponseMessages) {
       //process message from botframework
       api.sendText(senduserid, getResponseMessageItem.text, function (err, result) {
         if (err) {
-          logger.log('3.2:reply wechat client (' + senduserid + ') message error', err);
+          logger.log('error', err);
         }
       });
 
@@ -201,13 +223,13 @@ function sendMessageToClient(senduserid, getResponseMessages) {
             api.uploadMedia(getResponseMessageAttachmentItem.content.images[0].url, 'image', function (err, result) {
               // console.log('start upload image' + result);
               if (err) {
-                logger.log('3.4:upload image error', err);
+                logger.log('error', err);
               }
               else {
                 //-------------send image
                 api.sendImage(senduserid, result.media_id, function (err, result) {
                   if (err) {
-                    logger.log('3.5:send image wechat client (' + senduserid + ') attachment error', err);
+                    logger.log('error', err);
                   }
                 });
                 //-------------
@@ -218,7 +240,7 @@ function sendMessageToClient(senduserid, getResponseMessages) {
 
           api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text, function (err, result) {
             if (err) {
-              logger.log('3.3:reply wechat client (' + senduserid + ') attachment error', err);
+              logger.log('error', err);
             }
           });
 
@@ -227,6 +249,11 @@ function sendMessageToClient(senduserid, getResponseMessages) {
     });
 
 
+  }
+  else {
+    //no message get from botframework
+    api.sendText(senduserid, 'time out , but bot framework no response', function (err, result) {
+    });
   }
 }
 
