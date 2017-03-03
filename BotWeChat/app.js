@@ -23,7 +23,7 @@ var app = express();
 var logger = new (winston.Logger)({
   transports: [
     new (winston.transports.Console)(),
-    new (winston.transports.File)({ filename: './log/bot-wechat-0302.log' })
+    new (winston.transports.File)({ filename: './log/bot-wechat-0303.log' })
   ]
 });
 
@@ -94,20 +94,30 @@ client.getTokenObject(secret).subscribe(
         logger.log('1.2:info', _conversationWss);
       },
       (err) => console.log(err),
-      () => console.log("1.2:get conversation successfully---------------------------------")
+      () => console.log("1.2:get conversation successfully")
     )
 
     //maybe need refresh token here
   },
   (err) => console.log(err),
-  () => console.log('1.1:get token successfully---------------------------------')
+  () => console.log('1.1:get token successfully')
 )
+//=========================================================================================================
+function refreshToken() {
+  client.refTokenObject(secret).subscribe(
+    (tokenObject) => {
+      _tokenObject = tokenObject;
+      logger.log('1.3:refresh token', _tokenObject);
+    },
+    (err) => console.log(err),
+    () => console.log('1.3:refresh token successfully')
+  )
+}
 //=========================================================================================================
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
-
 
 // uncomment after placing your favicon in /public
 //app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
@@ -116,6 +126,31 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+
+//send message to bot framework
+function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
+
+  client.sendMessage(_tokenObject, messageBody).subscribe(
+    (data) => {
+      var sendMessageid = data.id;
+
+      //time out function get message from botframework
+      setTimeout(function () {
+        getmessagefrombotframework(touserid, _tokenObject, sendMessageid, _watermark)
+      }, 10000);
+    },
+    (err) => {
+
+      logger.log('2.2:send message to BotFramework error', err);
+
+      refreshToken();
+      sendMessage(_tokenObject, messageBody, touserid);
+    },
+    () => {
+      console.log("2.2:send message to bot botframework successfully");
+    }
+  );
+}
 
 //get message from bot framework function
 function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark) {
@@ -128,45 +163,71 @@ function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwate
 
       //filter activities
       var getResponseMessages = _.where(result.activities, { replyToId: sendmsgid });
+      //send message to wechat client
+      sendMessageToClient(senduserid, getResponseMessages);
 
-      if (getResponseMessages) {
-
-        //process message
-        getResponseMessages.forEach(function (getResponseMessageItem) {
-
-          api.sendText(senduserid, getResponseMessageItem.text, function (err, result) {
-            if (err) {
-              logger.log('3.2:reply wechat client (' + senduserid + ') message error', err);
-            }
-          });
-
-          //process attachment
-          if (getResponseMessageItem.attachments) {
-            getResponseMessageItem.attachments.forEach(function (getResponseMessageAttachmentItem) {
-              if (getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.hero')
-
-                api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text + '\r' + getResponseMessageAttachmentItem.content.images[0].url, function (err, result) {
-                  if (err) {
-                    logger.log('3.3:reply wechat client (' + senduserid + ') attachment error', err);
-                  }
-                });
-            });
-          }
-        });
-      }
     },
-    (err) => logger.log('3.1:get message from botframework error', err),
-    () => console.log("3.1:get message from botframework successfully---------------------------------")
+    (err) => {
+      logger.log('3.1:get message from botframework error', err);
+
+      refreshToken();
+      getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark);
+    },
+    () => console.log("3.1:get message from botframework successfully")
   )
 }
 
-//wechat send message
-function wechatSendMessage(sendUserId, message) {
-  api.sendText(sendUserId, message, function (err, result) {
-    if (err) {
-      logger.log('error', err);
-    }
-  });
+//send to message to wechat client
+function sendMessageToClient(senduserid, getResponseMessages) {
+  if (getResponseMessages) {
+
+    //forEach message
+    getResponseMessages.forEach(function (getResponseMessageItem) {
+
+      //process message from botframework
+      api.sendText(senduserid, getResponseMessageItem.text, function (err, result) {
+        if (err) {
+          logger.log('3.2:reply wechat client (' + senduserid + ') message error', err);
+        }
+      });
+
+
+      //process attachment
+      if (getResponseMessageItem.attachments) {
+        getResponseMessageItem.attachments.forEach(function (getResponseMessageAttachmentItem) {
+          if (getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.hero')
+
+            //-------------upload media
+            api.uploadMedia(getResponseMessageAttachmentItem.content.images[0].url, 'image', function (err, result) {
+              // console.log('start upload image' + result);
+              if (err) {
+                logger.log('3.4:upload image error', err);
+              }
+              else {
+                //-------------send image
+                api.sendImage(senduserid, result.media_id, function (err, result) {
+                  if (err) {
+                    logger.log('3.5:send image wechat client (' + senduserid + ') attachment error', err);
+                  }
+                });
+                //-------------
+              }
+            });
+          //-------------
+
+
+          api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text, function (err, result) {
+            if (err) {
+              logger.log('3.3:reply wechat client (' + senduserid + ') attachment error', err);
+            }
+          });
+
+        });
+      }
+    });
+
+
+  }
 }
 
 //this can get message from WeChat server, and can send message to wechat client
@@ -190,21 +251,8 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
     "text": message.Content
   };
 
-  //send to message to bot framework
-  client.sendMessage(_tokenObject, messageBody).subscribe(
-    (data) => {
-      var sendMessageid = data.id;
-
-      //time out function get message from botframework
-      setTimeout(function () {
-        getmessagefrombotframework(touserid, _tokenObject, sendMessageid, _watermark)
-      }, 10000);
-    },
-    (err) => logger.log('2.2:send message to BotFramework error', err),
-    () => {
-      console.log("2.2:send message to bot botframework successfully");
-    }
-  );
+  //send message to botframework
+  sendMessageToBotframework(_tokenObject, messageBody, touserid);
 
   //response for wechat client
   res.reply('message send successfully, waiting for response');
