@@ -307,7 +307,7 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   sendMessageToBotframework(_tokenObject, messageBody, touserid);
 
   //response for wechat client
-  res.reply('message send successfully, waiting for response');
+  res.reply();
 
   //=========================================================================================================  
 }).image(function (message, req, res, next) {
