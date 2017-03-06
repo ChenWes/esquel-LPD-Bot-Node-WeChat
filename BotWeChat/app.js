@@ -13,6 +13,7 @@ var schedule = require('node-schedule');
 var fs = require('fs');
 var request = require('request');
 var url = require("url");
+var co = require('co');
 
 //for direct line
 var secret = 'JmQLHOoxqeg.cwA.UqE.ZeXqmfJ5ncjzD9ZcoOe4tvOW7VDhVHZCMjfEEyZsNDo';
@@ -140,6 +141,7 @@ function refreshToken() {
     () => console.log('1.3:refresh token successfully')
   )
 }
+//=========================================================================================================
 
 
 // view engine setup
@@ -153,7 +155,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-
+//=========================================================================================================
 //send message to bot framework
 function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
   client.sendMessage(_tokenObject, messageBody).subscribe(
@@ -173,7 +175,7 @@ function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
     }
   );
 }
-
+//=========================================================================================================
 //get message from bot framework function
 function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwatermark) {
   client.getMessage(tokenobject, sendwatermark).subscribe(
@@ -188,7 +190,7 @@ function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwate
 
       //if send message max , then restart the converstation
       var arr = sendmsgid.split('|');
-      console.log(arr[1]);
+      // console.log(arr[1]);
       if (arr[1] == '9999999') {
         getTokenAndGetConverstation();
       }
@@ -200,7 +202,7 @@ function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwate
     () => console.log("3.1:get message from botframework successfully")
   )
 }
-
+//=========================================================================================================
 
 var downloadImage = function (uri, filename, callback) {
   request.head(uri, function (err, res, body) {
@@ -210,11 +212,11 @@ var downloadImage = function (uri, filename, callback) {
     request(uri).pipe(fs.createWriteStream(filename)).on('close', callback);
   });
 };
-
+//=========================================================================================================
 //send to message to wechat client
 function sendMessageToClient(senduserid, getResponseMessages) {
   if (getResponseMessages) {
-    logger.log('info', getResponseMessages);
+    // logger.log('info', getResponseMessages);
     //forEach message
     getResponseMessages.forEach(function (getResponseMessageItem) {
 
@@ -229,36 +231,41 @@ function sendMessageToClient(senduserid, getResponseMessages) {
             getResponseMessageItem.attachments.forEach(function (getResponseMessageAttachmentItem) {
               if (getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.hero')
 
-                api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text, function (err, result) {
+                var imageTempName = url.parse(getResponseMessageAttachmentItem.content.images[0].url, true).query.fileName;
+              downloadImage(getResponseMessageAttachmentItem.content.images[0].url, 'tempImage/' + imageTempName, function () {
+                //-------------upload media
+                api.uploadMedia('tempImage/' + imageTempName, 'image', function (err, result) {
                   if (err) {
                     logger.log('error', err);
                   }
                   else {
+                    var mediaid = result.media_id;
+                    //delete temp file
+                    fs.unlink('tempImage/' + imageTempName);
 
-                    var imageTempName = url.parse(getResponseMessageAttachmentItem.content.images[0].url, true).query.fileName;
-                    downloadImage(getResponseMessageAttachmentItem.content.images[0].url, 'tempImage/' + imageTempName, function () {
-                      //-------------upload media
-                      api.uploadMedia('tempImage/' + imageTempName, 'image', function (err, result) {
-                        if (err) {
-                          logger.log('error', err);
-                        }
-                        else {
-                          //delete temp file
-                          fs.unlink('tempImage/' + imageTempName);
-                          //-------------send image
-                          api.sendImage(senduserid, result.media_id, function (err, result) {
-                            if (err) {
-                              logger.log('error', err);
-                            }
-                          });
-                          //-------------
-                        }
-                      });
-                      //-------------
+                    api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text, function (err, result) {
+                      if (err) {
+                        logger.log('error', err);
+                      }
+                      else {
+
+                        //-------------send image
+                        api.sendImage(senduserid, mediaid, function (err, result) {
+                          if (err) {
+                            logger.log('error', err);
+                          }
+                        });
+
+
+                      }
+                      //--------after send card message
                     });
+
+                    //-------------
                   }
-                  //--------after send card message
                 });
+                //-------------
+              });
             });
           }
           //----------after send main message
@@ -267,7 +274,6 @@ function sendMessageToClient(senduserid, getResponseMessages) {
       });
 
     });
-
   }
   else {
     //no message get from botframework
@@ -275,7 +281,7 @@ function sendMessageToClient(senduserid, getResponseMessages) {
     });
   }
 }
-
+//=========================================================================================================
 //this can get message from WeChat server, and can send message to wechat client
 //此处监控的是URL的wechat，那么在配置微信的URL时，也需要在主机URL地址后面加入wechat这样才可以获取到数据
 app.use(express.query());

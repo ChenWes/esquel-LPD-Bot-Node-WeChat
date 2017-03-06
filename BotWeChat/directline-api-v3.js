@@ -84,7 +84,7 @@ BotConnect.prototype.initConversationStream = (TokenObject) => {
                 observer.complete();
             }
             if (response.statusCode === 200 || 201) {
-                observer.next(JSON.parse(body).streamUrl);
+                observer.next(JSON.parse(body));
                 observer.complete();
             }
             else {
