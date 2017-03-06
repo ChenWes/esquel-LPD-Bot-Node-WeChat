@@ -212,67 +212,64 @@ var downloadImage = function (uri, filename, callback) {
     request(uri).pipe(fs.createWriteStream(filename)).on('close', callback);
   });
 };
+
+function* processMessageItem(senduserid, messageItem) {
+  yield api.sendText(senduserid, messageItem.text, function (err, result) {
+    if (err) {
+      logger.log('error', err);
+    }
+  });
+
+  for (let messageAttachmentItem in messageItem.attachments) {
+    yield processMessageAttachmentItem(senduserid, messageAttachmentItem.attachment);
+  }
+
+  return Promise.resolve(true);
+}
+
+function* processMessageAttachmentItem(senduserid, messageAttachmentItem) {
+  yield api.sendText(senduserid, messageAttachmentItem.content.title + '\r' + messageAttachmentItem.content.subtitle + '\r' + messageAttachmentItem.content.text, function (err, result) {
+    if (err) {
+      logger.log('error', err);
+    }
+  });
+  
+  yield processMessageAttachmentImageItem(senduserid, messageAttachmentItem.image[0].url);
+
+  return Promise.resolve(true);
+}
+
+function* processMessageAttachmentImageItem(senduserid, messageAttachmentImageItem) {
+  var imageTempName = url.parse(messageAttachmentImageItem, true).query.fileName;
+  downloadImage(messageAttachmentImageItem, 'tempImage/' + imageTempName, function () {
+    //-------------upload media
+    api.uploadMedia('tempImage/' + imageTempName, 'image', function (err, result) {
+      if (err) {
+        logger.log('error', err);
+      }
+      else {
+        //delete temp image
+        fs.unlink('tempImage/' + imageTempName);
+        //send image
+        api.sendImage(senduserid, result.media_id, function (err, result) {
+          if (err) {
+            logger.log('error', err);
+          }
+        });
+      }
+    });
+  });
+}
 //=========================================================================================================
 //send to message to wechat client
 function sendMessageToClient(senduserid, getResponseMessages) {
   if (getResponseMessages) {
-    // logger.log('info', getResponseMessages);
-    //forEach message
-    getResponseMessages.forEach(function (getResponseMessageItem) {
-
-      //process message from botframework
-      api.sendText(senduserid, getResponseMessageItem.text, function (err, result) {
-        if (err) {
-          logger.log('error', err);
-        }
-        else {
-          //process attachment
-          if (getResponseMessageItem.attachments) {
-            getResponseMessageItem.attachments.forEach(function (getResponseMessageAttachmentItem) {
-              if (getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.thumbnail' || getResponseMessageAttachmentItem.contentType == 'application/vnd.microsoft.card.hero')
-
-                var imageTempName = url.parse(getResponseMessageAttachmentItem.content.images[0].url, true).query.fileName;
-              downloadImage(getResponseMessageAttachmentItem.content.images[0].url, 'tempImage/' + imageTempName, function () {
-                //-------------upload media
-                api.uploadMedia('tempImage/' + imageTempName, 'image', function (err, result) {
-                  if (err) {
-                    logger.log('error', err);
-                  }
-                  else {
-                    var mediaid = result.media_id;
-                    //delete temp file
-                    fs.unlink('tempImage/' + imageTempName);
-
-                    api.sendText(senduserid, getResponseMessageAttachmentItem.content.title + '\r' + getResponseMessageAttachmentItem.content.subtitle + '\r' + getResponseMessageAttachmentItem.content.text, function (err, result) {
-                      if (err) {
-                        logger.log('error', err);
-                      }
-                      else {
-
-                        //-------------send image
-                        api.sendImage(senduserid, mediaid, function (err, result) {
-                          if (err) {
-                            logger.log('error', err);
-                          }
-                        });
-
-
-                      }
-                      //--------after send card message
-                    });
-
-                    //-------------
-                  }
-                });
-                //-------------
-              });
-            });
-          }
-          //----------after send main message
-        }
-
-      });
-
+    co(function* () {
+      for (let messageItem of getResponseMessages) {
+        yield processMessageItem(senduserid, messageItem);
+      }      
+    })(function (err, result) {
+      console.log(result)
     });
   }
   else {
