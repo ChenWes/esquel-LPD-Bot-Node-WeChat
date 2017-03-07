@@ -31,7 +31,7 @@ var app = express();
 var logger = new (winston.Logger)({
   transports: [
     new (winston.transports.Console)(),
-    new (winston.transports.File)({ filename: './log/bot-wechat-0305.log' })
+    new (winston.transports.File)({ filename: './log/bot-wechat-0307.log' })
   ]
 });
 
@@ -40,7 +40,7 @@ var config = {
   token: 'weixin',
   appid: 'wx1434eed5268660c4',
   encodingAESKey: 'ZEtViedarf49EUOCDeu45pqhkZhKPFBjSHI2DynP4vq',
-  checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false 
+  checkSignature: true // 可选，默认为true。由于微信公众平台接口调试工具在明文模式下不发送签名，所以如要使用该测试工具，请将其设置为false
 };
 
 //create wechat-api entity
@@ -90,7 +90,7 @@ var api = new wechatAPI(config.appid, '30a5f51682755652e6e02879757a0fb1');
 // });
 
 //=========================================================================================================
-//get token 
+//get token
 function getTokenAndGetConverstation() {
   client.getTokenObject(secret).subscribe(
     (tokenObject) => {
@@ -189,10 +189,12 @@ function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwate
       sendMessageToClient(senduserid, getResponseMessages);
 
       //if send message max , then restart the converstation
-      var arr = sendmsgid.split('|');
-      // console.log(arr[1]);
-      if (arr[1] == '9999999') {
-        getTokenAndGetConverstation();
+      if (sendmsgid) {
+        var arr = sendmsgid.split('|');
+        // console.log(arr[1]);
+        if (arr[1] == '9999999') {
+          getTokenAndGetConverstation();
+        }
       }
 
     },
@@ -203,74 +205,92 @@ function getmessagefrombotframework(senduserid, tokenobject, sendmsgid, sendwate
   )
 }
 //=========================================================================================================
-
-var downloadImage = function (uri, filename, callback) {
-  request.head(uri, function (err, res, body) {
-    // console.log('content-type:', res.headers['content-type']);
-    // console.log('content-length:', res.headers['content-length']);
-
-    request(uri).pipe(fs.createWriteStream(filename)).on('close', callback);
+const sendTextToClient = (senduserid, text) => new Promise((done, fail) => {
+  api.sendText(senduserid, text, (err, result) => {
+    err ? fail(err) : done(result);
   });
-};
+});
+const sendImageToClient = (senduserid, mediaid) => new Promise((done, fail) => {
+  api.sendImage(senduserid, mediaid, (err, result) => {
+    err ? fail(err) : done(result);
+  });
+});
+
+const uploadImageToServer = (filename, filetype) => new Promise((done, fail) => {
+  api.uploadMedia(filename, filetype, (err, result) => {
+    err ? fail(err) : done(result);
+  })
+})
+
+const downloadImageToLocal = (url, filename) => new Promise((done, fail) => {
+  request(url).on('error', fail).pipe(fs.createWriteStream(filename).on('finish', () => {
+    done();
+  }));
+});
+
 
 function* processMessageItem(senduserid, messageItem) {
-  yield api.sendText(senduserid, messageItem.text, function (err, result) {
-    if (err) {
-      logger.log('error', err);
-    }
-  });
-
-  for (let messageAttachmentItem in messageItem.attachments) {
-    yield processMessageAttachmentItem(senduserid, messageAttachmentItem.attachment);
+  //master text
+  if (messageItem.text) {
+    yield sendTextToClient(senduserid, messageItem.text);
   }
 
-  return Promise.resolve(true);
-}
+  if (messageItem.attachments) {
+    let attachmentItems = messageItem.attachments;
+    logger.log('error', messageItem.attachments);
+    for (let key in attachmentItems) {
+      if (attachmentItems[key].contentType == 'application/vnd.microsoft.card.thumbnail' || attachmentItems[key].contentType == 'application/vnd.microsoft.card.hero') {
+        //attachment text
+        let message = '';
+        if (attachmentItems[key].content.title) {
+          message = message + attachmentItems[key].content.title;
+        }
+        if (attachmentItems[key].content.subtitle) {
+          message = message + '\r' + attachmentItems[key].content.subtitle;
+        }
+        if (attachmentItems[key].content.text) {
+          message = message + '\r' + attachmentItems[key].content.text;
+        }
+        if (message) {
+          yield sendTextToClient(senduserid, message);
+        }
 
-function* processMessageAttachmentItem(senduserid, messageAttachmentItem) {
-  yield api.sendText(senduserid, messageAttachmentItem.content.title + '\r' + messageAttachmentItem.content.subtitle + '\r' + messageAttachmentItem.content.text, function (err, result) {
-    if (err) {
-      logger.log('error', err);
-    }
-  });
-  
-  yield processMessageAttachmentImageItem(senduserid, messageAttachmentItem.image[0].url);
-
-  return Promise.resolve(true);
-}
-
-function* processMessageAttachmentImageItem(senduserid, messageAttachmentImageItem) {
-  var imageTempName = url.parse(messageAttachmentImageItem, true).query.fileName;
-  downloadImage(messageAttachmentImageItem, 'tempImage/' + imageTempName, function () {
-    //-------------upload media
-    api.uploadMedia('tempImage/' + imageTempName, 'image', function (err, result) {
-      if (err) {
-        logger.log('error', err);
-      }
-      else {
-        //delete temp image
-        fs.unlink('tempImage/' + imageTempName);
-        //send image
-        api.sendImage(senduserid, result.media_id, function (err, result) {
-          if (err) {
-            logger.log('error', err);
+        //image
+        let images = attachmentItems[key].content.images;
+        for (let imgkey in images) {
+          let imageurl = images[imgkey].url;
+          if (imageurl) {
+            //down load image to local
+            let imageTempName = url.parse(imageurl, true).query.fileName;
+            yield downloadImageToLocal(imageurl, 'tempImage/' + imageTempName);
+            //upload to wechat server
+            let serverresult = yield uploadImageToServer('tempImage/' + imageTempName, 'image');
+            fs.unlink('tempImage/' + imageTempName);
+            //send image
+            if (serverresult) {
+              yield sendImageToClient(senduserid, serverresult.media_id);
+            }
           }
-        });
+        }
       }
-    });
-  });
+    }
+  }
 }
 //=========================================================================================================
 //send to message to wechat client
 function sendMessageToClient(senduserid, getResponseMessages) {
   if (getResponseMessages) {
+
+    logger.log('info', getResponseMessages);
+
     co(function* () {
-      for (let messageItem of getResponseMessages) {
-        yield processMessageItem(senduserid, messageItem);
-      }      
-    })(function (err, result) {
-      console.log(result)
+      for (let getmessageItem of getResponseMessages) {
+        yield processMessageItem(senduserid, getmessageItem);
+      }
+    }).catch(function (err) {
+      console.log(err);
     });
+
   }
   else {
     //no message get from botframework
@@ -304,9 +324,9 @@ app.use('/wechat', wechat(config, wechat.text(function (message, req, res, next)
   sendMessageToBotframework(_tokenObject, messageBody, touserid);
 
   //response for wechat client
-  res.reply();
+  res.reply('');
 
-  //=========================================================================================================  
+  //=========================================================================================================
 }).image(function (message, req, res, next) {
   var message = req.weixin;
   logger.log("info", message);
