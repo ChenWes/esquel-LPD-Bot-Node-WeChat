@@ -237,7 +237,7 @@ function* processMessageItem(senduserid, messageItem) {
 
   if (messageItem.attachments) {
     let attachmentItems = messageItem.attachments;
-    logger.log('error', messageItem.attachments);
+    // logger.log('error', messageItem.attachments);
     for (let key in attachmentItems) {
       if (attachmentItems[key].contentType == 'application/vnd.microsoft.card.thumbnail' || attachmentItems[key].contentType == 'application/vnd.microsoft.card.hero') {
         //attachment text
