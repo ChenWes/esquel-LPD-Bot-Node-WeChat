@@ -31,7 +31,7 @@ var app = express();
 var logger = new (winston.Logger)({
   transports: [
     new (winston.transports.Console)(),
-    new (winston.transports.File)({ filename: './log/bot-wechat-0307.log' })
+    new (winston.transports.File)({ filename: './log/bot-wechat.log' })
   ]
 });
 
@@ -103,6 +103,19 @@ function getTokenAndGetConverstation() {
           _conversationWss = message;
           logger.log('info', _conversationWss);
 
+          // var ws = new WebSocket(_conversationWss.streamUrl);
+          // ws.on('message', function (retsult, flags) {
+          //   logger.log('info', retsult);
+
+          //   // if (JSON.parse(retsult).activities[0].from.id !== message.FromUserName) {
+          //   //   res.reply(JSON.parse(retsult).activities[0].text);
+          //   // }
+          // });
+          // ws.on('close', function close() {
+          //   //observer.complete();
+          //   console.log("get Message complete");
+          // });
+
 
           //refresh token,every 15 min refreshToken
           var rule = new schedule.RecurrenceRule();
@@ -166,6 +179,7 @@ function sendMessageToBotframework(_tokenObject, messageBody, touserid) {
       setTimeout(function () {
         getmessagefrombotframework(touserid, _tokenObject, sendMessageid, _watermark)
       }, 10000);
+
     },
     (err) => {
       logger.log('error', err);
